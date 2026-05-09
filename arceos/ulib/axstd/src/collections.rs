@@ -1,4 +1,4 @@
-use core::hash::{BuildHasher, Hash, Hasher};
+use core::hash::{BuildHasher, Hasher};
 use core::ops::{Deref, DerefMut};
 
 use arceos_api::modules::axhal::misc;
