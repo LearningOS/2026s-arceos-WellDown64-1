@@ -7,7 +7,8 @@ use axerrno::LinuxError;
 use axtask::current;
 use axtask::TaskExtRef;
 use axhal::paging::MappingFlags;
-use arceos_posix_api as api;
+use arceos_posix_api::{self as api, get_file_like};
+use memory_addr::{VirtAddrRange, PAGE_SIZE_4K};
 
 const SYS_IOCTL: usize = 29;
 const SYS_OPENAT: usize = 56;
@@ -140,7 +141,31 @@ fn sys_mmap(
     fd: i32,
     _offset: isize,
 ) -> isize {
-    unimplemented!("no sys_mmap!");
+    let mut buf = [0u8; 1024];
+    unsafe { 
+        get_file_like(fd)
+            .unwrap()
+            .read( core::slice::from_raw_parts_mut(buf.as_mut_ptr(), length))
+            .unwrap();
+    }
+
+    let curr_task = current();
+    let mut usapce = curr_task.task_ext().aspace.lock();
+    let va_start = usapce.find_free_area(usapce.base(), PAGE_SIZE_4K, VirtAddrRange::from_start_size(usapce.base(), usapce.size())).unwrap();
+
+    let prot = MmapProt::from_bits_truncate(flags);
+    let flags: MappingFlags = prot.into();
+    usapce.map_alloc(va_start.into(), PAGE_SIZE_4K, MappingFlags::READ|MappingFlags::WRITE|MappingFlags::EXECUTE|MappingFlags::USER, true).unwrap();
+
+
+    unsafe {
+        usapce.write(
+            va_start.into(),
+            core::slice::from_raw_parts_mut(buf.as_mut_ptr(), length)
+        ).unwrap();
+    }
+
+    va_start.as_mut_ptr() as isize
 }
 
 fn sys_openat(dfd: c_int, fname: *const c_char, flags: c_int, mode: api::ctypes::mode_t) -> isize {
